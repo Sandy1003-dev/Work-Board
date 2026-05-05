@@ -113,6 +113,7 @@ html,body{height:100%;font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-
 .empty-col{text-align:center;padding:24px 6px;color:var(--text3);font-size:12px}
 .dl-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
 .dl-overdue{background:#FFEBE6;color:#DE350B}.dl-today{background:#FFEBE6;color:#DE350B}.dl-soon{background:#FFF7E6;color:#FF8B00}.dl-safe{background:#E3FCEF;color:#006644}.dl-done{background:#F4F5F7;color:#97A0AF;text-decoration:line-through}
+[data-theme="dark"] .dl-overdue{background:#3D1A1A;color:#FF5630}[data-theme="dark"] .dl-today{background:#3D1A1A;color:#FF5630}[data-theme="dark"] .dl-soon{background:#3D2E1A;color:#FFAB00}[data-theme="dark"] .dl-safe{background:#1A3A2A;color:#57D9A3}[data-theme="dark"] .dl-done{background:#253349;color:#6B7F94}
 /* Subtasks */
 .subtask-section{display:none;margin-top:7px;padding-top:7px;border-top:1px dashed var(--border)}
 .card.expanded .subtask-section{display:block}
@@ -239,7 +240,7 @@ function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g
 function $(id){return document.getElementById(id)}
 function dlDays(dl){if(!dl)return null;const t=new Date();t.setHours(0,0,0,0);const[y,m,d]=dl.split("-");const x=new Date(+y,+m-1,+d);x.setHours(0,0,0,0);return Math.ceil((x-t)/(864e5))}
 function dlCls(dl,st){if(st==="done")return"dl-done";const d=dlDays(dl);if(d===null)return"";if(d<0)return"dl-overdue";if(d===0)return"dl-today";if(d<=3)return"dl-soon";return"dl-safe"}
-function dlLbl(dl,st){if(!dl)return"";const d=dlDays(dl),ds=fmtDL(dl);if(st==="done")return`<span class="dl-badge dl-done">📅 ${ds}</span>`;if(d===null)return"";if(d<0)return`<span class="dl-badge dl-overdue">🔴 ${ds} (${Math.abs(d)}d overdue)</span>`;if(d===0)return`<span class="dl-badge dl-today">🔴 ${ds} (today!)</span>`;if(d<=3)return`<span class="dl-badge dl-soon">🟡 ${ds} (${d}d left)</span>`;return`<span class="dl-badge dl-safe">🟢 ${ds} (${d}d left)</span>`}
+function dlLbl(dl,st){if(!dl)return"";const d=dlDays(dl),ds=fmtDL(dl);if(st==="done")return`<span class="dl-badge dl-done">✅ ${ds}</span>`;if(d===null)return"";if(d<0)return`<span class="dl-badge dl-overdue">🔴 ${ds} (${Math.abs(d)}d overdue)</span>`;if(d===0)return`<span class="dl-badge dl-today">🔴 ${ds} (today!)</span>`;if(d<=3)return`<span class="dl-badge dl-soon">🟡 ${ds} (${d}d left)</span>`;return`<span class="dl-badge dl-safe">🟢 ${ds} (${d}d left)</span>`}
 // Nearest undone subtask date
 function nearestSubDate(subs,status){
   if(!subs||!subs.length)return"";
@@ -307,10 +308,38 @@ function mEditSub(i){const s=mSubs[i];const newText=prompt("Edit subtask:",s.tex
 
 function exportToday(){
   if(!tasks.length){alert("No tasks.");return}
-  let t="📋 Work Summary — "+fmtD(todayKey())+"\n\n";
-  COLS.forEach(col=>{const ct=tasks.filter(x=>x.status===col.key);if(!ct.length)return;t+="▸ "+col.label+" ("+ct.length+")\n";ct.forEach(x=>{let line="  "+PR[x.priority].icon+" ["+x.id+"] "+x.text;if(x.deadline){const d=dlDays(x.deadline);line+=" [Due: "+fmtDL(x.deadline);if(d!==null){if(d<0)line+=" ⚠️ OVERDUE";else if(d===0)line+=" ⚠️ TODAY";else line+=", "+d+"d left"}line+="]"}t+=line+"\n";if(x.subtasks&&x.subtasks.length){x.subtasks.forEach(s=>{let sl="    "+(s.done?"✅":"☐")+" "+s.text;if(s.date)sl+=" ["+fmtDL(s.date)+"]";t+=sl+"\n"})}});t+="\n"});
-  const d=tasks.filter(x=>x.status==="done").length,h=tasks.filter(x=>x.status==="hold").length,ov=tasks.filter(x=>x.status!=="done"&&x.deadline&&dlDays(x.deadline)<0).length;
-  t+="─────────────────\n✅ "+d+"/"+tasks.length+" completed";if(h)t+=" · ⏸ "+h+" on hold";if(ov)t+=" · 🔴 "+ov+" overdue";t+=" ("+Math.round(d/tasks.length*100)+"%)\n";
+  const pending=tasks.filter(x=>x.status!=="done");
+  const done=tasks.filter(x=>x.status==="done");
+  if(!pending.length){alert("All tasks completed! Nothing pending.");return}
+  let t="📋 Pending Work Summary — "+fmtD(todayKey())+"\n\n";
+  COLS.filter(col=>col.key!=="done").forEach(col=>{
+    const ct=pending.filter(x=>x.status===col.key);
+    if(!ct.length)return;
+    t+="▸ "+col.label+" ("+ct.length+")\n";
+    ct.forEach(x=>{
+      let line="  "+PR[x.priority].icon+" ["+x.id+"] "+x.text;
+      if(x.deadline){
+        const d=dlDays(x.deadline);
+        line+=" [Due: "+fmtDL(x.deadline);
+        if(d!==null){if(d<0)line+=" ⚠️ OVERDUE";else if(d===0)line+=" ⚠️ TODAY";else line+=", "+d+"d left"}
+        line+="]";
+      }
+      t+=line+"\n";
+      // Only show PENDING subtasks (skip completed ones)
+      if(x.subtasks&&x.subtasks.length){
+        const pendingSubs=x.subtasks.filter(s=>!s.done);
+        pendingSubs.forEach(s=>{let sl="    ☐ "+s.text;if(s.date)sl+=" ["+fmtDL(s.date)+"]";t+=sl+"\n"});
+      }
+    });
+    t+="\n";
+  });
+  const h=pending.filter(x=>x.status==="hold").length;
+  const ov=pending.filter(x=>x.deadline&&dlDays(x.deadline)<0).length;
+  t+="─────────────────\n";
+  t+="✅ "+done.length+"/"+tasks.length+" completed ("+Math.round(done.length/tasks.length*100)+"%)";
+  if(h)t+=" · ⏸ "+h+" on hold";
+  if(ov)t+=" · 🔴 "+ov+" overdue";
+  t+="\n";
   navigator.clipboard.writeText(t).then(()=>showToast("📋 Copied!")).catch(()=>{const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);showToast("📋 Copied!")})}
 
 function onDS(e,id){dragId=id;e.dataTransfer.effectAllowed="move";setTimeout(()=>{const el=document.querySelector(`[data-id="${id}"]`);if(el)el.classList.add("dragging")},0)}
